@@ -11,16 +11,30 @@ venv/
 # Jupyter
 .ipynb_checkpoints/
 
-# Data / models
+# Raw data (do NOT track images)
 data/raw/
+
+# Keep dataset splits
+!data/splits/
+
+# Models (do NOT track trained weights)
 models/
-runs/
 *.pt
 *.pth
 
-# Logs
+# TensorBoard logs
 runs/
-reports/
+
+# Reports
+# Keep evaluation outputs
+!reports/
+!reports/metrics/
+!reports/figures/
+!reports/metrics/*.json
+!reports/figures/*.png
+reports/metrics/*.csv
+
+# Other logs
 *.log
 
 # Secrets
