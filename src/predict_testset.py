@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -10,7 +11,8 @@ from torch.utils.data import DataLoader
 from torchvision import models
 
 REPO = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO))
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
 
 from src.data.dataset import ISICBinaryDataset  # noqa: E402
 
@@ -24,40 +26,69 @@ def build_model(num_classes: int = 2) -> nn.Module:
 
 @torch.no_grad()
 def main():
-    ckpt_path = REPO / "models" / "best_mobilenetv2.pt"
-    test_csv = REPO / "data" / "splits" / "test.csv"
-    out_dir = REPO / "reports" / "metrics"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "test_predictions.csv"
+    parser = argparse.ArgumentParser(description="Generate test_predictions.csv for the Streamlit dashboard.")
+    parser.add_argument("--ckpt", type=str, default="models/best_mobilenetv2.pt", help="Checkpoint path")
+    parser.add_argument("--split", type=str, default="data/splits/test.csv", help="Split CSV path")
+    parser.add_argument("--out", type=str, default="reports/metrics/test_predictions.csv", help="Output CSV path")
+    parser.add_argument("--batch-size", type=int, default=64, help="Batch size for inference")
+    parser.add_argument("--num-workers", type=int, default=0, help="DataLoader workers (Windows: keep 0)")
+    args = parser.parse_args()
+
+    ckpt_path = (REPO / args.ckpt).resolve()
+    split_csv = (REPO / args.split).resolve()
+    out_path = (REPO / args.out).resolve()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not ckpt_path.exists():
+        raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
+    if not split_csv.exists():
+        raise FileNotFoundError(f"Split CSV not found: {split_csv}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    ds = ISICBinaryDataset(test_csv, split="test")
-    dl = DataLoader(ds, batch_size=64, shuffle=False, num_workers=0, pin_memory=torch.cuda.is_available())
+    # Dataset + loader must preserve CSV order
+    ds = ISICBinaryDataset(split_csv, split="test")
+    dl = DataLoader(
+        ds,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+        pin_memory=torch.cuda.is_available(),
+    )
 
     model = build_model(2).to(device)
     ckpt = torch.load(ckpt_path, map_location=device)
-    model.load_state_dict(ckpt["model"])
+
+    # supports either {"model": state_dict} or raw state_dict
+    state = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
+    model.load_state_dict(state)
     model.eval()
 
-    # load original test split for image names/paths
-    df = pd.read_csv(test_csv)
-    probs_malig = []
-    preds_05 = []
+    # Load the same CSV used by dataset so we can append probabilities
+    df = pd.read_csv(split_csv)
 
-    i = 0
+    probs_malig: list[float] = []
+
     for x, _y in dl:
         x = x.to(device)
         logits = model(x)
-        probs = torch.softmax(logits, dim=1)[:, 1].detach().cpu().tolist()  # P(malignant)
-        probs_malig.extend(probs)
-        i += len(probs)
+        p = torch.softmax(logits, dim=1)[:, 1]  # P(malignant)
+        probs_malig.extend(p.detach().cpu().tolist())
+
+    # Sanity check alignment
+    if len(probs_malig) != len(df):
+        raise RuntimeError(
+            f"Prediction count mismatch: got {len(probs_malig)} probs but CSV has {len(df)} rows.\n"
+            "This usually means dataset ordering doesn't match CSV or some images failed to load."
+        )
 
     df["prob_malignant"] = probs_malig
-    df["pred_0.5"] = (df["prob_malignant"] >= 0.5).astype(int)
+    df["pred_0.5"] = (df["prob_malignant"] >= 0.5).astype(int)  # optional but nice for quick checks
 
     df.to_csv(out_path, index=False)
+
     print("Saved:", out_path)
+    print(f"Rows: {len(df)} | Device: {device} | Ckpt: {ckpt_path.name}")
 
 
 if __name__ == "__main__":
