@@ -1,10 +1,13 @@
 🩺 Skin Cancer CNN – Melanoma Detection (ISIC 2018)
 
-Computer Vision Final Project (CP4210)
+Computer Vision (CP4210)
 
 -This project builds a deep learning pipeline to detect melanoma vs non-melanoma using dermoscopy images from the ISIC 2018 dataset.
+
 -The model uses MobileNetV2 transfer learning and is deployed through a clean Streamlit analytics dashboard.
--⚠️ Educational use only. Not a medical device.
+
+
+⚠️ Educational use only. Not a medical device.
 
 
 🚀 What This Project Does
