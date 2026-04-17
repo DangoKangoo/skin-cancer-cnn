@@ -10,6 +10,8 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
 
+from src.utils.paths import portable_image_path
+
 
 @dataclass(frozen=True)
 class DataConfig:
@@ -65,7 +67,7 @@ class ISICBinaryDataset(Dataset):
 
         self.images = df["image"].astype(str).tolist()
         self.labels = df["label"].astype(int).tolist()
-        self.paths = [Path(p) for p in df["filepath"].astype(str).tolist()]
+        self.paths = [portable_image_path(p) for p in df["filepath"].astype(str).tolist()]
 
         # Fast sanity check (first few only to avoid slow startup)
         for p in self.paths[:20]:

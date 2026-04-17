@@ -1,8 +1,9 @@
-import os
 from pathlib import Path
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
+
+from src.utils.paths import repo_relative_image_path
 
 
 def main():
@@ -34,8 +35,8 @@ def main():
     df.drop(columns=["MEL"], inplace=True)
 
     # Verify image files exist
-    df["filepath"] = df["image"].apply(lambda x: str(images_dir / f"{x}.jpg"))
-    missing = df[~df["filepath"].apply(lambda p: Path(p).exists())]
+    df["filepath"] = df["image"].apply(repo_relative_image_path)
+    missing = df[~df["filepath"].apply(lambda p: (repo_root / Path(p)).exists())]
     if len(missing) > 0:
         # show a few missing to debug
         sample = missing.head(10)[["image", "filepath"]]
